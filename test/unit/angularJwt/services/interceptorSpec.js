@@ -48,6 +48,8 @@ describe('interceptor', function() {
       $q.all([
         $http({url: 'http://Example.com/hello' }),
         $http({url: 'http://www.example.com/hello' }),
+        $http({url: 'http://wwwXexample.com/hello' }),
+        $http({url: 'http://whitelisted.example.com.evil.com/hello' }),
         $http({url: 'http://whitelisted.example.com/hello' })
       ]).then(function () {
         done();
@@ -57,6 +59,12 @@ describe('interceptor', function() {
         return headers.Authorization === undefined;
       }).respond(200);
       $httpBackend.expectGET('http://www.example.com/hello', function (headers) {
+        return headers.Authorization === undefined;
+      }).respond(200);
+      $httpBackend.expectGET('http://wwwXexample.com/hello', function (headers) {
+        return headers.Authorization === undefined;
+      }).respond(200);
+      $httpBackend.expectGET('http://whitelisted.example.com.evil.com/hello', function (headers) {
         return headers.Authorization === undefined;
       }).respond(200);
       $httpBackend.expectGET('http://whitelisted.example.com/hello', function (headers) {
@@ -69,7 +77,7 @@ describe('interceptor', function() {
 
   it('should not add Authr headers to Cross Origin requests unless whitelisted with regexp', function (done) {
     module( function ($httpProvider, jwtOptionsProvider, jwtInterceptorProvider) {
-      jwtInterceptorProvider.whiteListedDomains = [/whitelisted(-pr-\d+)?\.Example\.com$/i]
+      jwtInterceptorProvider.whiteListedDomains = [/^whitelisted(-pr-\d+)?\.Example\.com$/i]
       jwtInterceptorProvider.tokenGetter = function() {
         return 123;
       }
@@ -80,6 +88,8 @@ describe('interceptor', function() {
       $q.all([
         $http({url: 'http://Example.com/hello' }),
         $http({url: 'http://www.example.com/hello' }),
+        $http({url: 'http://whitelisted-pr-123.example.com.evil.com/hello' }),
+        $http({url: 'http://extrawhitelisted-pr-123.example.com.evil.com/hello' }),
         $http({url: 'http://whitelisted-pr-123.example.com/hello' })
       ]).then(function () {
         done();
@@ -89,6 +99,12 @@ describe('interceptor', function() {
         return headers.Authorization === undefined;
       }).respond(200);
       $httpBackend.expectGET('http://www.example.com/hello', function (headers) {
+        return headers.Authorization === undefined;
+      }).respond(200);
+      $httpBackend.expectGET('http://whitelisted-pr-123.example.com.evil.com/hello', function (headers) {
+        return headers.Authorization === undefined;
+      }).respond(200);
+      $httpBackend.expectGET('http://extrawhitelisted-pr-123.example.com.evil.com/hello', function (headers) {
         return headers.Authorization === undefined;
       }).respond(200);
       $httpBackend.expectGET('http://whitelisted-pr-123.example.com/hello', function (headers) {
@@ -159,6 +175,53 @@ describe('interceptor', function() {
           return headers.Authorization === undefined;
         }).respond(200, 'hello');
         $httpBackend.flush();
+    });
+
+  });
+
+  it('should handle an undefined responseError', function (done) {
+    module( function($httpProvider, jwtOptionsProvider, jwtInterceptorProvider) {
+      jwtInterceptorProvider.tokenGetter = function() {
+        return 123;
+      }
+      $httpProvider.interceptors.push('jwtInterceptor');
+    });
+
+    inject(function (jwtInterceptor, $httpBackend) {
+      jwtInterceptor.responseError(undefined).then(function (data) {
+
+      }).catch(function (data) {
+        expect(data).to.be.equal(undefined);
+        done();
+      });
+
+      $httpBackend.flush();
+    });
+  });
+
+  it('should broadcast unauthenticated on 401 response', function (done) {
+    module( function ($httpProvider, jwtInterceptorProvider, jwtOptionsProvider, $rootScopeProvider) {
+      jwtInterceptorProvider.tokenGetter = function() {
+        return 123;
+      }
+      $httpProvider.interceptors.push('jwtInterceptor');
+    });
+
+    inject(function ($http, $httpBackend, $rootScope) {
+      sinon.spy($rootScope, "$broadcast");
+
+      $http({url: '/hello'}).then(function (data) {
+
+      }).catch(function (data) {
+        expect(data.status).to.be.equal(401);
+        expect($rootScope.$broadcast.calledWith("unauthenticated")).to.be.true
+        done();
+      });
+      $httpBackend.expectGET('/hello', function (headers) {
+        return headers.Authorization === 'Bearer 123';
+      }).respond(401, {}, {}, 'Error');
+      
+      $httpBackend.flush();
     });
 
   });

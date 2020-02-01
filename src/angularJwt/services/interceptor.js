@@ -20,9 +20,14 @@ angular.module('angular-jwt.interceptor', [])
         var hostname = urlUtils.urlResolve(url).hostname.toLowerCase();
         for (var i = 0; i < options.whiteListedDomains.length; i++) {
           var domain = options.whiteListedDomains[i];
-          var regexp = domain instanceof RegExp ? domain : new RegExp(domain, 'i');
-          if (hostname.match(regexp)) {
-            return true;
+          if (domain instanceof RegExp) {
+            if (hostname.match(domain)) {
+              return true;
+            }
+          } else {
+            if (hostname === domain.toLowerCase()) {
+              return true;
+            }
           }
         }
 
@@ -70,7 +75,7 @@ angular.module('angular-jwt.interceptor', [])
         },
         responseError: function (response) {
           // handle the case where the user is not authenticated
-          if (response.status === 401) {
+          if (response !== undefined && response.status === 401) {
             $rootScope.$broadcast('unauthenticated', response);
           }
           return $q.reject(response);
